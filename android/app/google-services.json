@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "674942633725",
+    "project_id": "jewels-1738e",
+    "storage_bucket": "jewels-1738e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:674942633725:android:1951762972b4e32fb2e094",
+        "android_client_info": {
+          "package_name": "com.example.jewels"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC7DICqi6Md_juqadRmv4sgE37tHkyrQ4c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
