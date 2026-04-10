@@ -1,13 +1,15 @@
-enum JewelryType { earring, necklace, chain }
+enum JewelryType { earring, necklace, chain, pendant }
 
 class JewelryItem {
   final String id;
   final String name;
-  final String imagePath; // absolute local file path OR asset path (assets/jewelry/...)
+  final String imagePath;       // full image (or left earring if isPair)
   final JewelryType type;
   final double scale;
   final String category;
-  final bool isAsset; // true = bundled asset, false = user-added file
+  final bool isAsset;
+  final String? glbPath;        // optional .glb for 3D viewer
+  final String? rightImagePath; // right earring crop (null = single earring)
 
   const JewelryItem({
     required this.id,
@@ -17,7 +19,14 @@ class JewelryItem {
     this.scale = 1.0,
     this.category = '',
     this.isAsset = false,
+    this.glbPath,
+    this.rightImagePath,
   });
+
+  /// True when the uploaded image was a pair and has been split.
+  bool get isPair => rightImagePath != null && rightImagePath!.isNotEmpty;
+
+  bool get has3dModel => glbPath != null && glbPath!.isNotEmpty;
 
   factory JewelryItem.fromMap(Map<String, dynamic> m) => JewelryItem(
         id: m['id'] as String,
@@ -30,6 +39,8 @@ class JewelryItem {
         scale: (m['scale'] as num?)?.toDouble() ?? 1.0,
         category: m['category'] as String? ?? '',
         isAsset: (m['isAsset'] as int?) == 1,
+        glbPath: m['glbPath'] as String?,
+        rightImagePath: m['rightImagePath'] as String?,
       );
 
   Map<String, dynamic> toMap() => {
@@ -40,9 +51,11 @@ class JewelryItem {
         'scale': scale,
         'category': category,
         'isAsset': isAsset ? 1 : 0,
+        'glbPath': glbPath,
+        'rightImagePath': rightImagePath,
       };
 
-  JewelryItem copyWith({double? scale}) => JewelryItem(
+  JewelryItem copyWith({double? scale, String? glbPath}) => JewelryItem(
         id: id,
         name: name,
         imagePath: imagePath,
@@ -50,5 +63,7 @@ class JewelryItem {
         scale: scale ?? this.scale,
         category: category,
         isAsset: isAsset,
+        glbPath: glbPath ?? this.glbPath,
+        rightImagePath: rightImagePath,
       );
 }

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -6,7 +7,6 @@ import '../models/jewelry_item.dart';
 import '../services/local_jewelry_service.dart';
 import '../theme/app_theme.dart';
 
-// Same materials as SubcategoryScreen so items always match the filter
 const _kMaterials = ['Gold', 'Silver', 'Diamond', 'Rose Gold'];
 
 class ShopOwnerScreen extends StatefulWidget {
@@ -20,7 +20,9 @@ class _ShopOwnerScreenState extends State<ShopOwnerScreen> {
   JewelryType _type = JewelryType.earring;
   String _material = 'Gold';
   double _scale = 1.0;
-  File? _pickedFile;
+  File? _pickedImage;
+  File? _pickedGlb;
+  bool _isPair = false; // earring pair toggle
   bool _uploading = false;
   List<JewelryItem> _items = [];
 
@@ -43,11 +45,23 @@ class _ShopOwnerScreenState extends State<ShopOwnerScreen> {
 
   Future<void> _pickImage() async {
     final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (picked != null) setState(() => _pickedFile = File(picked.path));
+    if (picked != null) setState(() => _pickedImage = File(picked.path));
   }
 
+  Future<void> _pickGlb() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['glb', 'gltf'],
+    );
+    if (result != null && result.files.single.path != null) {
+      setState(() => _pickedGlb = File(result.files.single.path!));
+    }
+  }
+
+  void _clearGlb() => setState(() => _pickedGlb = null);
+
   Future<void> _save() async {
-    if (_pickedFile == null || _nameCtrl.text.trim().isEmpty) {
+    if (_pickedImage == null || _nameCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a name and pick an image')),
       );
@@ -56,21 +70,32 @@ class _ShopOwnerScreenState extends State<ShopOwnerScreen> {
     setState(() => _uploading = true);
     try {
       await LocalJewelryService().addJewelry(
-        imageFile: _pickedFile!,
+        imageFile: _pickedImage!,
         name: _nameCtrl.text.trim(),
         type: _type,
         scale: _scale,
         category: _material,
+        glbFile: _pickedGlb,
+        isPair: _type == JewelryType.earring && _isPair,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Jewelry saved')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_pickedGlb != null
+                ? 'Jewelry saved with 3D model'
+                : (_isPair && _type == JewelryType.earring)
+                    ? 'Earring pair saved — split into left & right'
+                    : 'Jewelry saved — background removed automatically'),
+          ),
+        );
         _nameCtrl.clear();
         setState(() {
-          _pickedFile = null;
+          _pickedImage = null;
+          _pickedGlb = null;
           _scale = 1.0;
           _type = JewelryType.earring;
           _material = 'Gold';
+          _isPair = false;
         });
         _loadItems();
       }
@@ -167,15 +192,15 @@ class _ShopOwnerScreenState extends State<ShopOwnerScreen> {
                 color: AppColors.surfaceAlt,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                    color: _pickedFile != null
+                    color: _pickedImage != null
                         ? AppColors.gold
                         : AppColors.border,
-                    width: _pickedFile != null ? 1.5 : 1),
+                    width: _pickedImage != null ? 1.5 : 1),
               ),
-              child: _pickedFile != null
+              child: _pickedImage != null
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: Image.file(_pickedFile!, fit: BoxFit.contain))
+                      child: Image.file(_pickedImage!, fit: BoxFit.contain))
                   : Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -188,6 +213,14 @@ class _ShopOwnerScreenState extends State<ShopOwnerScreen> {
                       ],
                     ),
             ),
+          ),
+          const SizedBox(height: 12),
+
+          // ── GLB picker (optional) ─────────────────────────────────
+          _GlbPickerRow(
+            pickedGlb: _pickedGlb,
+            onPick: _pickGlb,
+            onClear: _clearGlb,
           ),
           const SizedBox(height: 14),
 
@@ -206,7 +239,7 @@ class _ShopOwnerScreenState extends State<ShopOwnerScreen> {
           Row(
             children: JewelryType.values.map((t) {
               final sel = _type == t;
-              final label = t == JewelryType.chain ? 'Chain' : t.name[0].toUpperCase() + t.name.substring(1);
+              final label = t.name[0].toUpperCase() + t.name.substring(1);
               return Expanded(
                 child: GestureDetector(
                   onTap: () => setState(() => _type = t),
@@ -223,10 +256,9 @@ class _ShopOwnerScreenState extends State<ShopOwnerScreen> {
                     child: Text(label,
                         textAlign: TextAlign.center,
                         style: GoogleFonts.dmSans(
-                            color: sel
-                                ? Colors.white
-                                : AppColors.textSecondary,
-                            fontSize: 12,
+                            color:
+                                sel ? Colors.white : AppColors.textSecondary,
+                            fontSize: 11,
                             fontWeight: FontWeight.w700)),
                   ),
                 ),
@@ -234,6 +266,15 @@ class _ShopOwnerScreenState extends State<ShopOwnerScreen> {
             }).toList(),
           ),
           const SizedBox(height: 14),
+
+          // ── Earring: Single / Pair toggle ─────────────────────────
+          if (_type == JewelryType.earring) ...[
+            _EarringPairToggle(
+              isPair: _isPair,
+              onChanged: (v) => setState(() => _isPair = v),
+            ),
+            const SizedBox(height: 14),
+          ],
 
           // ── Material ──────────────────────────────────────────────
           Text('Material',
@@ -252,8 +293,8 @@ class _ShopOwnerScreenState extends State<ShopOwnerScreen> {
                 onTap: () => setState(() => _material = m),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
                     color: sel ? AppColors.gold : AppColors.surfaceAlt,
                     borderRadius: BorderRadius.circular(20),
@@ -329,11 +370,22 @@ class _ShopOwnerScreenState extends State<ShopOwnerScreen> {
                 elevation: 0,
               ),
               child: _uploading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
+                  ? const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white)),
+                        SizedBox(width: 10),
+                        Text('Removing background…',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600)),
+                      ],
+                    )
                   : Text('Save Jewelry',
                       style: GoogleFonts.dmSans(
                           fontWeight: FontWeight.w700, fontSize: 15)),
@@ -374,8 +426,8 @@ class _ShopOwnerScreenState extends State<ShopOwnerScreen> {
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 24),
           child: Text('No jewelry yet — add some above',
-              style:
-                  GoogleFonts.dmSans(color: AppColors.textHint, fontSize: 13)),
+              style: GoogleFonts.dmSans(
+                  color: AppColors.textHint, fontSize: 13)),
         ),
       );
     }
@@ -387,6 +439,195 @@ class _ShopOwnerScreenState extends State<ShopOwnerScreen> {
       itemBuilder: (_, i) => _ItemRow(
         item: _items[i],
         onDelete: () => _confirmDelete(_items[i]),
+      ),
+    );
+  }
+}
+
+// ── Earring pair toggle ───────────────────────────────────────────────────────
+
+class _EarringPairToggle extends StatelessWidget {
+  final bool isPair;
+  final ValueChanged<bool> onChanged;
+  const _EarringPairToggle({required this.isPair, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Image Type',
+            style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textHint,
+                letterSpacing: 0.4)),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            _ToggleOption(
+              label: 'Single Earring',
+              sublabel: 'One earring shown on both ears',
+              icon: Icons.radio_button_unchecked,
+              selected: !isPair,
+              onTap: () => onChanged(false),
+            ),
+            const SizedBox(width: 8),
+            _ToggleOption(
+              label: 'Pair of Earrings',
+              sublabel: 'Image split: left → left ear, right → right ear',
+              icon: Icons.compare,
+              selected: isPair,
+              onTap: () => onChanged(true),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ToggleOption extends StatelessWidget {
+  final String label;
+  final String sublabel;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+  const _ToggleOption({
+    required this.label,
+    required this.sublabel,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.goldLight : AppColors.surfaceAlt,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+                color: selected ? AppColors.gold : AppColors.border,
+                width: selected ? 1.5 : 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon,
+                  color: selected ? AppColors.gold : AppColors.textHint,
+                  size: 18),
+              const SizedBox(height: 4),
+              Text(label,
+                  style: GoogleFonts.dmSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: selected
+                          ? AppColors.textPrimary
+                          : AppColors.textSecondary)),
+              const SizedBox(height: 2),
+              Text(sublabel,
+                  style: GoogleFonts.dmSans(
+                      fontSize: 9, color: AppColors.textHint),
+                  maxLines: 2),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── GLB picker row ────────────────────────────────────────────────────────────
+
+class _GlbPickerRow extends StatelessWidget {
+  final File? pickedGlb;
+  final VoidCallback onPick;
+  final VoidCallback onClear;
+  const _GlbPickerRow(
+      {required this.pickedGlb,
+      required this.onPick,
+      required this.onClear});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: pickedGlb == null ? onPick : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceAlt,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+              color: pickedGlb != null ? AppColors.gold : AppColors.border,
+              width: pickedGlb != null ? 1.5 : 1),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              pickedGlb != null
+                  ? Icons.view_in_ar_rounded
+                  : Icons.view_in_ar_outlined,
+              color: pickedGlb != null ? AppColors.gold : AppColors.textHint,
+              size: 22,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    pickedGlb != null ? '3D Model Selected' : 'Add 3D Model (optional)',
+                    style: GoogleFonts.dmSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: pickedGlb != null
+                            ? AppColors.textPrimary
+                            : AppColors.textHint),
+                  ),
+                  Text(
+                    pickedGlb != null
+                        ? pickedGlb!.path.split('/').last
+                        : '.glb or .gltf file — enables 3D viewer tab',
+                    style: GoogleFonts.dmSans(
+                        fontSize: 11,
+                        color: pickedGlb != null
+                            ? AppColors.textSecondary
+                            : AppColors.textHint),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            if (pickedGlb != null) ...[
+              IconButton(
+                icon: const Icon(Icons.close_rounded,
+                    color: AppColors.textHint, size: 18),
+                onPressed: onClear,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ] else ...[
+              TextButton(
+                onPressed: onPick,
+                style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4)),
+                child: Text('Browse',
+                    style: GoogleFonts.dmSans(
+                        color: AppColors.gold,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -406,7 +647,6 @@ class _ItemRow extends StatelessWidget {
       decoration: cardDecoration(radius: 12),
       child: Row(
         children: [
-          // Thumbnail — fixed size, no JewelryCard nesting
           Container(
             width: 56,
             height: 56,
@@ -421,7 +661,6 @@ class _ItemRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          // Info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -440,12 +679,15 @@ class _ItemRow extends StatelessWidget {
                     const SizedBox(width: 6),
                     if (item.category.isNotEmpty)
                       _Badge(item.category, AppColors.textHint),
+                    const SizedBox(width: 6),
+                    // Show 3D badge if GLB is attached
+                    if (item.has3dModel)
+                      _Badge('3D', const Color(0xFF4CAF50)),
                   ],
                 ),
               ],
             ),
           ),
-          // Delete (only user-added items)
           if (!item.isAsset)
             IconButton(
               icon: const Icon(Icons.delete_outline_rounded,

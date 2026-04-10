@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/jewelry_item.dart';
 import '../services/local_jewelry_service.dart';
+import '../state/ar_state.dart';
 import '../theme/app_theme.dart';
 import 'ar_try_on_screen.dart';
 
@@ -47,15 +48,18 @@ class _SubcategoryScreenState extends State<SubcategoryScreen> {
     _loadItems();
   }
 
-  void _openAR(JewelryItem item) => Navigator.push(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => ArTryOnScreen(initialItem: item),
-          transitionsBuilder: (_, a, __, child) =>
-              FadeTransition(opacity: a, child: child),
-          transitionDuration: const Duration(milliseconds: 200),
-        ),
-      );
+  void _openAR(JewelryItem item) {
+    ArState.instance.select(item);
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => ArTryOnScreen(initialItem: item),
+        transitionsBuilder: (_, a, __, child) =>
+            FadeTransition(opacity: a, child: child),
+        transitionDuration: const Duration(milliseconds: 200),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

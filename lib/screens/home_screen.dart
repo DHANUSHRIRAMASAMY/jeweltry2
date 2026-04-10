@@ -1,41 +1,57 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/jewelry_item.dart';
+import '../services/local_jewelry_service.dart';
+import '../state/ar_state.dart';
 import '../theme/app_theme.dart';
+import '../widgets/jewelry_card.dart';
+import 'ar_try_on_screen.dart';
 import 'search_screen.dart';
 import 'shop_owner_screen.dart';
-import 'subcategory_screen.dart';
-import 'ar_try_on_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
 
-  static const _collections = [
-    _Collection(
-      type: JewelryType.earring,
-      label: 'Earrings',
-      subtitle: 'Studs, hoops, drops & more',
-      icon: Icons.earbuds_outlined,
-      gradient: [Color(0xFFFFF8EC), Color(0xFFFDF3DC)],
-      borderColor: Color(0xFFEDD9A3),
-    ),
-    _Collection(
-      type: JewelryType.necklace,
-      label: 'Necklace',
-      subtitle: 'Pendants, chokers & layered',
-      icon: Icons.favorite_border_rounded,
-      gradient: [Color(0xFFF0F4FF), Color(0xFFE8EEFF)],
-      borderColor: Color(0xFFBDCAF5),
-    ),
-    _Collection(
-      type: JewelryType.chain,
-      label: 'Chain & Pendant',
-      subtitle: 'Gold, silver & diamond chains',
-      icon: Icons.link_rounded,
-      gradient: [Color(0xFFF2FFF4), Color(0xFFE6F9E8)],
-      borderColor: Color(0xFFB2DDB6),
-    ),
-  ];
+class _HomeScreenState extends State<HomeScreen> {
+  List<JewelryItem> _allItems = [];
+  bool _loading = true;
+  String _activeCategory = 'All';
+  static const _categories = ['All', 'Earring', 'Necklace', 'Chain', 'Pendant'];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadItems();
+  }
+
+  Future<void> _loadItems() async {
+    setState(() => _loading = true);
+    final items = await LocalJewelryService().getAllItems();
+    if (mounted) setState(() { _allItems = items; _loading = false; });
+  }
+
+  List<JewelryItem> get _filtered {
+    if (_activeCategory == 'All') return _allItems;
+    return _allItems
+        .where((i) => i.type.name.toLowerCase() == _activeCategory.toLowerCase())
+        .toList();
+  }
+
+  void _openAR(JewelryItem item) {
+    ArState.instance.select(item);
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => ArTryOnScreen(initialItem: item),
+        transitionsBuilder: (_, a, __, child) =>
+            FadeTransition(opacity: a, child: child),
+        transitionDuration: const Duration(milliseconds: 220),
+      ),
+    );
+  }
 
   PageRoute _fade(Widget p) => PageRouteBuilder(
         pageBuilder: (_, __, ___) => p,
@@ -51,51 +67,132 @@ class HomeScreen extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            // Top bar
             _TopBar(
               onSearchTap: () =>
                   Navigator.push(context, _fade(const SearchScreen())),
-              onShopTap: () =>
-                  Navigator.push(context, _fade(const ShopOwnerScreen())),
+              onShopTap: () async {
+                await Navigator.push(context, _fade(const ShopOwnerScreen()));
+                _loadItems();
+              },
             ),
-            // Body
             Expanded(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: RefreshIndicator(
+                color: AppColors.gold,
+                onRefresh: _loadItems,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(
+                      parent: BouncingScrollPhysics()),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 24),
-                      // Hero banner
-                      _HeroBanner(
+                      const SizedBox(height: 20),
+                      _HeroCameraCard(
                         onTap: () => Navigator.push(
                             context, _fade(const ArTryOnScreen())),
                       ),
                       const SizedBox(height: 28),
-                      // Section title
-                      Text('Collections',
-                          style: GoogleFonts.dmSans(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary)),
-                      const SizedBox(height: 4),
-                      Text('Choose a category to explore',
-                          style: GoogleFonts.dmSans(
-                              fontSize: 13, color: AppColors.textHint)),
-                      const SizedBox(height: 16),
-                      // 3 collection cards
-                      ..._collections.map((c) => _CollectionCard(
-                            collection: c,
-                            onTap: () => Navigator.push(
-                              context,
-                              _fade(SubcategoryScreen(
-                                  type: c.type, typeLabel: c.label)),
+                      // Section header
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Collections',
+                                style: GoogleFonts.dmSans(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.textPrimary)),
+                            GestureDetector(
+                              onTap: () => Navigator.push(
+                                  context, _fade(const SearchScreen())),
+                              child: Text('See all',
+                                  style: GoogleFonts.dmSans(
+                                      fontSize: 13,
+                                      color: AppColors.gold,
+                                      fontWeight: FontWeight.w600)),
                             ),
-                          )),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      _CategoryChips(
+                        active: _activeCategory,
+                        categories: _categories,
+                        onSelect: (c) => setState(() => _activeCategory = c),
+                      ),
+                      const SizedBox(height: 16),
+                      // Horizontal jewelry list
+                      SizedBox(
+                        height: 148,
+                        child: _loading
+                            ? const Center(
+                                child: CircularProgressIndicator(
+                                    color: AppColors.gold))
+                            : _filtered.isEmpty
+                                ? Center(
+                                    child: Text('No items yet',
+                                        style: GoogleFonts.dmSans(
+                                            color: AppColors.textHint,
+                                            fontSize: 13)))
+                                : ListView.builder(
+                                    scrollDirection: Axis.horizontal,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 20),
+                                    itemCount: _filtered.length,
+                                    itemBuilder: (_, i) => JewelryCard(
+                                      item: _filtered[i],
+                                      onTap: () => _openAR(_filtered[i]),
+                                    ),
+                                  ),
+                      ),
                       const SizedBox(height: 28),
-                      // Footer
+                      // Quick actions
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Text('Quick Actions',
+                            style: GoogleFonts.dmSans(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary)),
+                      ),
+                      const SizedBox(height: 14),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _QuickAction(
+                                icon: Icons.camera_alt_outlined,
+                                label: 'Try On',
+                                onTap: () => Navigator.push(
+                                    context, _fade(const ArTryOnScreen())),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _QuickAction(
+                                icon: Icons.search_rounded,
+                                label: 'Search',
+                                onTap: () => Navigator.push(
+                                    context, _fade(const SearchScreen())),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _QuickAction(
+                                icon: Icons.store_outlined,
+                                label: 'My Shop',
+                                onTap: () async {
+                                  await Navigator.push(context,
+                                      _fade(const ShopOwnerScreen()));
+                                  _loadItems();
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 36),
                       Center(
                         child: Text('JewelTry · Works Offline',
                             style: GoogleFonts.dmSans(
@@ -116,25 +213,6 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-// ── Data class ────────────────────────────────────────────────────────────────
-
-class _Collection {
-  final JewelryType type;
-  final String label;
-  final String subtitle;
-  final IconData icon;
-  final List<Color> gradient;
-  final Color borderColor;
-  const _Collection({
-    required this.type,
-    required this.label,
-    required this.subtitle,
-    required this.icon,
-    required this.gradient,
-    required this.borderColor,
-  });
-}
-
 // ── Top bar ───────────────────────────────────────────────────────────────────
 
 class _TopBar extends StatelessWidget {
@@ -152,7 +230,8 @@ class _TopBar extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 36, height: 36,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
                     color: AppColors.gold,
                     borderRadius: BorderRadius.circular(10)),
@@ -204,7 +283,7 @@ class _TopBar extends StatelessWidget {
                   const SizedBox(width: 12),
                   const Icon(Icons.search, color: AppColors.textHint, size: 20),
                   const SizedBox(width: 8),
-                  Text('Search jewelry by name...',
+                  Text('Search jewelry by name…',
                       style: GoogleFonts.dmSans(
                           color: AppColors.textHint, fontSize: 14)),
                 ],
@@ -217,192 +296,199 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-// ── Hero banner ───────────────────────────────────────────────────────────────
+// ── Hero card ─────────────────────────────────────────────────────────────────
 
-class _HeroBanner extends StatelessWidget {
+class _HeroCameraCard extends StatelessWidget {
   final VoidCallback onTap;
-  const _HeroBanner({required this.onTap});
+  const _HeroCameraCard({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        clipBehavior: Clip.hardEdge,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-              colors: [Color(0xFFF5EDD6), Color(0xFFFDF8EE)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFFE8D9B0)),
-          boxShadow: const [
-            BoxShadow(
-                color: Color(0x18C9A84C), blurRadius: 20, offset: Offset(0, 8))
-          ],
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              right: -16, top: -16,
-              child: Container(
-                width: 110, height: 110,
-                decoration: const BoxDecoration(
-                    shape: BoxShape.circle, color: Color(0x14C9A84C)),
+    final h = (MediaQuery.of(context).size.width * 0.52).clamp(160.0, 220.0);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: h,
+          width: double.infinity,
+          clipBehavior: Clip.hardEdge,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+                colors: [Color(0xFFF5EDD6), Color(0xFFFDF8EE)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE8D9B0)),
+            boxShadow: const [
+              BoxShadow(
+                  color: Color(0x18C9A84C),
+                  blurRadius: 20,
+                  offset: Offset(0, 8))
+            ],
+          ),
+          child: Stack(
+            children: [
+              Positioned(
+                right: -20,
+                top: -20,
+                child: Container(
+                  width: 130,
+                  height: 130,
+                  decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.gold.withOpacity(0.08)),
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppColors.gold,
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: const [
-                              BoxShadow(
-                                  color: Color(0x50C9A84C),
-                                  blurRadius: 8,
-                                  offset: Offset(0, 3))
-                            ],
-                          ),
-                          child: const Icon(Icons.camera_alt_outlined,
-                              color: Colors.white, size: 18),
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsets.all(22),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(9),
+                        decoration: BoxDecoration(
+                          color: AppColors.gold,
+                          borderRadius: BorderRadius.circular(11),
+                          boxShadow: [
+                            BoxShadow(
+                                color: AppColors.gold.withOpacity(0.35),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4))
+                          ],
                         ),
-                        const SizedBox(height: 10),
-                        Text('Try On Now',
-                            style: GoogleFonts.dmSans(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary,
-                                height: 1.2)),
-                        const SizedBox(height: 3),
-                        Text('See jewelry on your face live',
+                        child: const Icon(Icons.camera_alt_outlined,
+                            color: Colors.white, size: 20),
+                      ),
+                      const SizedBox(height: 12),
+                      Text('Try On Jewelry',
+                          style: GoogleFonts.dmSans(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                              height: 1.2)),
+                      const SizedBox(height: 3),
+                      Text('See how it looks on you in real time',
+                          style: GoogleFonts.dmSans(
+                              fontSize: 12, color: AppColors.textSecondary),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 7),
+                        decoration: BoxDecoration(
+                            color: AppColors.gold,
+                            borderRadius: BorderRadius.circular(20)),
+                        child: Text('Open Camera',
                             style: GoogleFonts.dmSans(
                                 fontSize: 12,
-                                color: AppColors.textSecondary)),
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 7),
-                          decoration: BoxDecoration(
-                              color: AppColors.gold,
-                              borderRadius: BorderRadius.circular(20)),
-                          child: Text('Open Camera',
-                              style: GoogleFonts.dmSans(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white)),
-                        ),
-                      ],
-                    ),
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white)),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  const Icon(Icons.face_retouching_natural_outlined,
-                      size: 64, color: Color(0x40C9A84C)),
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-// ── Collection card ───────────────────────────────────────────────────────────
+// ── Category chips ────────────────────────────────────────────────────────────
 
-class _CollectionCard extends StatelessWidget {
-  final _Collection collection;
+class _CategoryChips extends StatelessWidget {
+  final String active;
+  final List<String> categories;
+  final ValueChanged<String> onSelect;
+  const _CategoryChips(
+      {required this.active,
+      required this.categories,
+      required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 36,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: categories.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          final cat = categories[i];
+          final isActive = cat == active;
+          return GestureDetector(
+            onTap: () => onSelect(cat),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: isActive ? AppColors.gold : AppColors.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: isActive ? AppColors.gold : AppColors.border),
+                boxShadow: isActive
+                    ? [
+                        BoxShadow(
+                            color: AppColors.gold.withOpacity(0.25),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3))
+                      ]
+                    : null,
+              ),
+              child: Text(cat,
+                  style: GoogleFonts.dmSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isActive
+                          ? Colors.white
+                          : AppColors.textSecondary)),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ── Quick action ──────────────────────────────────────────────────────────────
+
+class _QuickAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
   final VoidCallback onTap;
-  const _CollectionCard({required this.collection, required this.onTap});
+  const _QuickAction(
+      {required this.icon, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-              colors: collection.gradient,
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: collection.borderColor),
-          boxShadow: const [
-            BoxShadow(
-                color: AppColors.shadow, blurRadius: 10, offset: Offset(0, 3))
-          ],
-        ),
-        child: Row(
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        decoration: cardDecoration(radius: 14),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Icon circle
-            Container(
-              width: 52, height: 52,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                      color: collection.borderColor.withValues(alpha: 0.5),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2))
-                ],
-              ),
-              child: Icon(collection.icon, color: AppColors.gold, size: 26),
+            Icon(icon, color: AppColors.gold, size: 22),
+            const SizedBox(height: 7),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(label,
+                  style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary),
+                  textAlign: TextAlign.center),
             ),
-            const SizedBox(width: 16),
-            // Text
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(collection.label,
-                      style: GoogleFonts.dmSans(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary)),
-                  const SizedBox(height: 3),
-                  Text(collection.subtitle,
-                      style: GoogleFonts.dmSans(
-                          fontSize: 12, color: AppColors.textSecondary)),
-                  const SizedBox(height: 8),
-                  // Material preview chips
-                  Wrap(
-                    spacing: 6,
-                    children: ['Gold', 'Silver', 'Diamond', 'Rose Gold']
-                        .map((m) => Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                    color: collection.borderColor),
-                              ),
-                              child: Text(m,
-                                  style: GoogleFonts.dmSans(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.textSecondary)),
-                            ))
-                        .toList(),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Icon(Icons.arrow_forward_ios_rounded,
-                size: 16, color: AppColors.textHint),
           ],
         ),
       ),

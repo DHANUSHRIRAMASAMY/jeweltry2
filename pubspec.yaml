@@ -14,6 +14,7 @@ dependencies:
   # Camera & AR
   camera: ^0.11.0+2
   google_mlkit_face_detection: ^0.11.0
+  google_mlkit_face_mesh_detection: ^0.1.0
 
   # Local storage
   sqflite: ^2.3.3
@@ -22,6 +23,13 @@ dependencies:
 
   # Image handling
   image_picker: ^1.1.2
+  image: ^4.1.7          # on-device background removal
+
+  # 3D viewer
+  model_viewer_plus: ^1.9.3
+
+  # File picker (for .glb upload)
+  file_picker: ^8.0.0
 
   # Utils
   uuid: ^4.5.1
