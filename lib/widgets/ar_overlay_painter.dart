@@ -112,8 +112,6 @@ class ArOverlayPainter extends CustomPainter {
       case JewelryType.necklace:
       case JewelryType.chain:
         _necklaceMesh(canvas, cs, sx, sy, rollRad, perspX, scaleFactor: 1.6);
-      case JewelryType.pendant:
-        _necklaceMesh(canvas, cs, sx, sy, rollRad, perspX, scaleFactor: 1.0);
     }
   }
 
@@ -278,11 +276,9 @@ class ArOverlayPainter extends CustomPainter {
         }
       case JewelryType.necklace:
       case JewelryType.chain:
-      case JewelryType.pendant:
         final noseBaseLm    = face!.landmarks[FaceLandmarkType.noseBase];
         final bottomMouthLm = face!.landmarks[FaceLandmarkType.bottomMouth];
-        final scaleFactor = selectedItem!.type == JewelryType.pendant
-            ? 1.0 : 1.6;
+        const scaleFactor = 1.6;
         final w = (faceW * scaleFactor * selectedItem!.scale)
             .clamp(100.0, 520.0);
         final h = w * _aspect();

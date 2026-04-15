@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/jewelry_item.dart';
@@ -19,7 +20,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<JewelryItem> _allItems = [];
   bool _loading = true;
   String _activeCategory = 'All';
-  static const _categories = ['All', 'Earring', 'Necklace', 'Chain', 'Pendant'];
+  static const _categories = ['All', 'Earring', 'Necklace', 'Chain'];
 
   @override
   void initState() {
@@ -104,7 +105,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     color: AppColors.textPrimary)),
                             GestureDetector(
                               onTap: () => Navigator.push(
-                                  context, _fade(const SearchScreen())),
+                                  context, _fade(const SearchScreen(showAll: true))),
                               child: Text('See all',
                                   style: GoogleFonts.dmSans(
                                       fontSize: 13,
@@ -121,30 +122,44 @@ class _HomeScreenState extends State<HomeScreen> {
                         onSelect: (c) => setState(() => _activeCategory = c),
                       ),
                       const SizedBox(height: 16),
-                      // Horizontal jewelry list
-                      SizedBox(
-                        height: 148,
-                        child: _loading
-                            ? const Center(
+                      // Vertical jewelry grid
+                      _loading
+                          ? const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 40),
+                              child: Center(
                                 child: CircularProgressIndicator(
-                                    color: AppColors.gold))
-                            : _filtered.isEmpty
-                                ? Center(
+                                    color: AppColors.gold)),
+                            )
+                          : _filtered.isEmpty
+                              ? Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 40),
+                                  child: Center(
                                     child: Text('No items yet',
                                         style: GoogleFonts.dmSans(
                                             color: AppColors.textHint,
-                                            fontSize: 13)))
-                                : ListView.builder(
-                                    scrollDirection: Axis.horizontal,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 20),
-                                    itemCount: _filtered.length,
-                                    itemBuilder: (_, i) => JewelryCard(
-                                      item: _filtered[i],
-                                      onTap: () => _openAR(_filtered[i]),
-                                    ),
+                                            fontSize: 13)),
                                   ),
-                      ),
+                                )
+                              : GridView.builder(
+                                  shrinkWrap: true,
+                                  physics:
+                                      const NeverScrollableScrollPhysics(),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 20),
+                                  gridDelegate:
+                                      const SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: 2,
+                                    crossAxisSpacing: 12,
+                                    mainAxisSpacing: 12,
+                                    childAspectRatio: 0.78,
+                                  ),
+                                  itemCount: _filtered.length,
+                                  itemBuilder: (_, i) => _GridCard(
+                                    item: _filtered[i],
+                                    onTap: () => _openAR(_filtered[i]),
+                                  ),
+                                ),
                       const SizedBox(height: 28),
                       // Quick actions
                       Padding(
@@ -457,6 +472,116 @@ class _CategoryChips extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Grid card ─────────────────────────────────────────────────────────────────
+
+class _GridCard extends StatelessWidget {
+  final JewelryItem item;
+  final VoidCallback onTap;
+  const _GridCard({required this.item, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+          boxShadow: const [
+            BoxShadow(
+                color: AppColors.shadow,
+                blurRadius: 10,
+                offset: Offset(0, 3))
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(15)),
+                child: Container(
+                  color: AppColors.surfaceAlt,
+                  padding: const EdgeInsets.all(12),
+                  child: _buildImage(),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+              child: Text(
+                item.name,
+                style: GoogleFonts.dmSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.goldLight,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      item.type.name.toUpperCase(),
+                      style: GoogleFonts.dmSans(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.gold,
+                          letterSpacing: 0.3),
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppColors.gold,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.camera_alt_outlined,
+                        color: Colors.white, size: 14),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImage() {
+    if (item.isAsset) {
+      return Image.asset(item.imagePath,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => const _GridPlaceholder());
+    }
+    final f = File(item.imagePath);
+    if (!f.existsSync()) return const _GridPlaceholder();
+    return Image.file(f,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => const _GridPlaceholder());
+  }
+}
+
+class _GridPlaceholder extends StatelessWidget {
+  const _GridPlaceholder();
+  @override
+  Widget build(BuildContext context) => const Center(
+        child: Icon(Icons.diamond_outlined, color: AppColors.border, size: 36),
+      );
 }
 
 // ── Quick action ──────────────────────────────────────────────────────────────

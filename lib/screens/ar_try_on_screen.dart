@@ -17,6 +17,7 @@ import '../theme/app_theme.dart';
 import '../widgets/ar_overlay_painter.dart';
 import '../widgets/ear_smoother.dart';
 import '../widgets/jewelry_card.dart';
+import 'jewelry_select_screen.dart';
 
 class ArTryOnScreen extends StatefulWidget {
   final JewelryItem? initialItem;
@@ -146,7 +147,7 @@ class _ArTryOnScreenState extends State<ArTryOnScreen>
 
       final ctrl = CameraController(
         cam,
-        ResolutionPreset.medium,
+        ResolutionPreset.medium,   // medium keeps face-detection stream smooth
         enableAudio: false,
         imageFormatGroup: imageFormat,
       );
@@ -276,6 +277,81 @@ class _ArTryOnScreenState extends State<ArTryOnScreen>
     }
   }
 
+  Future<void> _capturePhoto() async {
+    if (_controller == null || !_cameraReady) return;
+    try {
+      // 1. Stop the face-detection stream
+      if (_controller!.value.isStreamingImages) {
+        await _controller!.stopImageStream();
+      }
+
+      final cam = _controller!.description;
+
+      // 2. Spin up a dedicated ultraHigh controller just for the shot
+      final hiCtrl = CameraController(
+        cam,
+        ResolutionPreset.ultraHigh,
+        enableAudio: false,
+      );
+      await hiCtrl.initialize();
+
+      // Let the camera lock focus & exposure
+      await Future.delayed(const Duration(milliseconds: 600));
+
+      final xFile = await hiCtrl.takePicture();
+      await hiCtrl.dispose();
+
+      // 3. Flip horizontally for front camera
+      String finalPath = xFile.path;
+      final isFront = cam.lensDirection == CameraLensDirection.front;
+      if (isFront) {
+        finalPath = await _flipImageHorizontally(xFile.path);
+      }
+
+      if (!mounted) return;
+
+      await Navigator.push(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) =>
+              JewelrySelectScreen(capturedPhotoPath: finalPath),
+          transitionsBuilder: (_, a, __, child) =>
+              FadeTransition(opacity: a, child: child),
+          transitionDuration: const Duration(milliseconds: 250),
+        ),
+      );
+
+      // 4. Restart the stream controller when we come back
+      if (mounted && _controller != null) {
+        await Future.delayed(const Duration(milliseconds: 300));
+        if (mounted && _controller != null) {
+          try { await _controller!.startImageStream(_onFrame); } catch (_) {}
+        }
+      }
+    } catch (e) {
+      debugPrint('Capture error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Capture failed: $e')),
+        );
+        try { await _controller?.startImageStream(_onFrame); } catch (_) {}
+      }
+    }
+  }
+
+  /// Flips [sourcePath] horizontally and saves back as high-quality JPEG.
+  static Future<String> _flipImageHorizontally(String sourcePath) async {
+    final bytes = await File(sourcePath).readAsBytes();
+    final flipped = await Isolate.run(() {
+      final decoded = img.decodeImage(bytes);
+      if (decoded == null) return bytes;
+      // Encode as JPEG at quality 95 — sharp and fast
+      return img.encodeJpg(img.flipHorizontal(decoded), quality: 95) as List<int>;
+    });
+    await File(sourcePath).writeAsBytes(flipped);
+    return sourcePath;
+  }
+
   Future<void> _loadJewelryImage(JewelryItem item) async {
     // Already fully loaded — nothing to do
     if (_cache.containsKey(item.id) && 
@@ -334,7 +410,7 @@ class _ArTryOnScreenState extends State<ArTryOnScreen>
           }
         }
       } else {
-        // ── Non-earring (necklace, chain, pendant) ────────────────────────
+        // ── Non-earring (necklace, chain) ────────────────────────
         final codec = await ui.instantiateImageCodec(bytes);
         _cache[item.id] = (await codec.getNextFrame()).image;
       }
@@ -531,6 +607,7 @@ class _ArTryOnScreenState extends State<ArTryOnScreen>
                   onItemTap: _onItemTap,
                   smoothedLeftLobe: _smoothedLeft,
                   smoothedRightLobe: _smoothedRight,
+                  onCapture: _capturePhoto,
                 ),
                 _ViewerTab3d(selected: selected),
               ],
@@ -557,6 +634,7 @@ class _ArCameraTab extends StatelessWidget {
   final ValueChanged<JewelryItem> onItemTap;
   final Offset? smoothedLeftLobe;
   final Offset? smoothedRightLobe;
+  final VoidCallback onCapture;
 
   const _ArCameraTab({
     required this.controller,
@@ -569,6 +647,7 @@ class _ArCameraTab extends StatelessWidget {
     required this.rightJewelryImage,
     required this.items,
     required this.onItemTap,
+    required this.onCapture,
     this.smoothedLeftLobe,
     this.smoothedRightLobe,
   });
@@ -653,6 +732,36 @@ class _ArCameraTab extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20)),
                 child: const Text('Position your face in frame',
                     style: TextStyle(color: Colors.white, fontSize: 13)),
+              ),
+            ),
+          ),
+
+        // Capture button — sits above the jewelry panel
+        if (cameraReady)
+          Positioned(
+            bottom: 160 + bottomPad,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: GestureDetector(
+                onTap: onCapture,
+                child: Container(
+                  width: 68,
+                  height: 68,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white,
+                    border: Border.all(color: Colors.white38, width: 3),
+                    boxShadow: const [
+                      BoxShadow(
+                          color: Colors.black38,
+                          blurRadius: 12,
+                          offset: Offset(0, 4))
+                    ],
+                  ),
+                  child: const Icon(Icons.camera_alt_rounded,
+                      color: Colors.black87, size: 30),
+                ),
               ),
             ),
           ),

@@ -1,4 +1,4 @@
-enum JewelryType { earring, necklace, chain, pendant }
+enum JewelryType { earring, necklace, chain }
 
 class JewelryItem {
   final String id;

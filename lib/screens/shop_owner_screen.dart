@@ -22,7 +22,6 @@ class _ShopOwnerScreenState extends State<ShopOwnerScreen> {
   double _scale = 1.0;
   File? _pickedImage;
   File? _pickedGlb;
-  bool _isPair = false; // earring pair toggle
   bool _uploading = false;
   List<JewelryItem> _items = [];
 
@@ -76,16 +75,14 @@ class _ShopOwnerScreenState extends State<ShopOwnerScreen> {
         scale: _scale,
         category: _material,
         glbFile: _pickedGlb,
-        isPair: _type == JewelryType.earring && _isPair,
+        isPair: _type == JewelryType.earring, // always treat earrings as pair
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(_pickedGlb != null
                 ? 'Jewelry saved with 3D model'
-                : (_isPair && _type == JewelryType.earring)
-                    ? 'Earring pair saved — split into left & right'
-                    : 'Jewelry saved — background removed automatically'),
+                : 'Jewelry saved — background removed automatically'),
           ),
         );
         _nameCtrl.clear();
@@ -95,7 +92,6 @@ class _ShopOwnerScreenState extends State<ShopOwnerScreen> {
           _scale = 1.0;
           _type = JewelryType.earring;
           _material = 'Gold';
-          _isPair = false;
         });
         _loadItems();
       }
@@ -267,15 +263,6 @@ class _ShopOwnerScreenState extends State<ShopOwnerScreen> {
           ),
           const SizedBox(height: 14),
 
-          // ── Earring: Single / Pair toggle ─────────────────────────
-          if (_type == JewelryType.earring) ...[
-            _EarringPairToggle(
-              isPair: _isPair,
-              onChanged: (v) => setState(() => _isPair = v),
-            ),
-            const SizedBox(height: 14),
-          ],
-
           // ── Material ──────────────────────────────────────────────
           Text('Material',
               style: GoogleFonts.dmSans(
@@ -439,105 +426,6 @@ class _ShopOwnerScreenState extends State<ShopOwnerScreen> {
       itemBuilder: (_, i) => _ItemRow(
         item: _items[i],
         onDelete: () => _confirmDelete(_items[i]),
-      ),
-    );
-  }
-}
-
-// ── Earring pair toggle ───────────────────────────────────────────────────────
-
-class _EarringPairToggle extends StatelessWidget {
-  final bool isPair;
-  final ValueChanged<bool> onChanged;
-  const _EarringPairToggle({required this.isPair, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Image Type',
-            style: GoogleFonts.dmSans(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textHint,
-                letterSpacing: 0.4)),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            _ToggleOption(
-              label: 'Single Earring',
-              sublabel: 'One earring shown on both ears',
-              icon: Icons.radio_button_unchecked,
-              selected: !isPair,
-              onTap: () => onChanged(false),
-            ),
-            const SizedBox(width: 8),
-            _ToggleOption(
-              label: 'Pair of Earrings',
-              sublabel: 'Image split: left → left ear, right → right ear',
-              icon: Icons.compare,
-              selected: isPair,
-              onTap: () => onChanged(true),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _ToggleOption extends StatelessWidget {
-  final String label;
-  final String sublabel;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-  const _ToggleOption({
-    required this.label,
-    required this.sublabel,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: selected ? AppColors.goldLight : AppColors.surfaceAlt,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-                color: selected ? AppColors.gold : AppColors.border,
-                width: selected ? 1.5 : 1),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon,
-                  color: selected ? AppColors.gold : AppColors.textHint,
-                  size: 18),
-              const SizedBox(height: 4),
-              Text(label,
-                  style: GoogleFonts.dmSans(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: selected
-                          ? AppColors.textPrimary
-                          : AppColors.textSecondary)),
-              const SizedBox(height: 2),
-              Text(sublabel,
-                  style: GoogleFonts.dmSans(
-                      fontSize: 9, color: AppColors.textHint),
-                  maxLines: 2),
-            ],
-          ),
-        ),
       ),
     );
   }
